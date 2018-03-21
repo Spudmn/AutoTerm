@@ -45,8 +45,6 @@ else:
         
   
 
-
-
 class SerialThread(threading.Thread):
     def __init__(self, queue,sPort_Name,lb_Status):
         threading.Thread.__init__(self)
@@ -54,6 +52,7 @@ class SerialThread(threading.Thread):
         self.sPort_Name = sPort_Name
         self.lb_Status = lb_Status
         self.state = 0
+        self.Serial_Port = None
 
     def Is_Comport_Present(self,sComport):
         for port, _desc, _hwid in comports():
@@ -69,11 +68,14 @@ class SerialThread(threading.Thread):
                 if self.Is_Comport_Present(self.sPort_Name):
                     
                     try:
-                        s = serial.Serial(self.sPort_Name,115200)
+                        self.Serial_Port = serial.Serial(self.sPort_Name,115200)
                         self.state = 1
                         self.lb_Status.config(text= "Status: Online",fg="black")
                     except :
-                        s.close()
+                        self.lb_Status.config(text= "Status: Can not open port", fg="red")
+                        if self.Serial_Port != None:
+                            self.Serial_Port.close()
+                            self.Serial_Port = None
                         #print "Port Error"
                 else:
                     self.lb_Status.config(text= "Status: Offline", fg="red")
@@ -83,16 +85,20 @@ class SerialThread(threading.Thread):
             else:  # State == 1
                 try:
                       
-                    data = s.read(1)
+                    data = self.Serial_Port.read(1)
                     if data is None or data == "":
 #                         print "Return"
-                        s.close()
+                        if self.Serial_Port != None:
+                            self.Serial_Port.close()
+                            self.Serial_Port = None
                         self.state = 0
                         continue
                     self.queue.put(data)
                 except :
 #                     print "Serial Error"
-                    s.close()
+                    if self.Serial_Port != None:
+                        self.Serial_Port.close()
+                        self.Serial_Port = None
                     self.state = 0
                     
 
@@ -102,12 +108,16 @@ class App(tk.Tk):
         tk.Tk.__init__(self)
         
         self.sComport = sComport
-        self.title("AutoTerm V0.1")
+        self.title("AutoTerm V0.2")
        
         self.text = tkst.ScrolledText(self, height=30, width=80,font='Terminal_Ctrl+Hex 9', background="black", foreground="yellow")
                
         self.frame = tk.Frame(self)
         self.frame.pack(side='bottom')
+
+        self.bt_Clear_Screen = tk.Button(self.frame, text="Clear", command = self.On_bt_Clear_Screen_Click)
+        self.bt_Clear_Screen.pack( side = 'left')
+
 
         self.lb_Comport = tk.Label(self.frame, text="Comport: " + self.sComport)
         self.lb_Comport.pack( side = 'left')
@@ -126,6 +136,9 @@ class App(tk.Tk):
         self.process_serial()
 
 
+    def On_bt_Clear_Screen_Click(self):
+        self.text.delete(1.0,'end')
+        
  
     def process_serial(self):
         while self.queue.qsize():
