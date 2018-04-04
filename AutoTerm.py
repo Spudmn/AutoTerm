@@ -3,7 +3,7 @@
 #description     :AutoTerm_old is a serial port terminal. This terminal will automagically reconnect to the serial port when it is plugged in again.
 #author          :Spudmn
 #date            :20/03/2018
-#version         :0.1
+#version         :0.3
 #usage           :python AutoTerm_old.py COM5   or python AutoTerm_old.py /dev/ttyUSB0  
 #notes           :
 #python_version  :2.7.9  
@@ -108,7 +108,9 @@ class App(tk.Tk):
         tk.Tk.__init__(self)
         
         self.sComport = sComport
-        self.title("AutoTerm V0.2")
+        self.title("AutoTerm V0.3")
+        
+
        
         self.text = tkst.ScrolledText(self, height=30, width=80,font='Terminal_Ctrl+Hex 9', background="black", foreground="yellow")
                
@@ -128,6 +130,9 @@ class App(tk.Tk):
         
         self.text.pack(side='top', fill='y')
         
+        self.text.bind("<KeyPress>", self.keydown)
+        self.text.bind("<KeyRelease>", self.keyup)
+        
         
         self.queue = Queue.Queue()
         self.thread = SerialThread(self.queue,self.sComport,self.lb_Status)
@@ -135,6 +140,16 @@ class App(tk.Tk):
         self.thread.start()
         self.process_serial()
 
+
+    def keyup(self,e):
+#         print 'up', e.char
+        pass
+        
+    def keydown(self,e):
+#         print 'down', e.char
+        if self.thread.Serial_Port != None:
+            if self.thread.Serial_Port.isOpen():
+                self.thread.Serial_Port.write(e.char)
 
     def On_bt_Clear_Screen_Click(self):
         self.text.delete(1.0,'end')
