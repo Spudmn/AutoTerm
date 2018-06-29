@@ -3,7 +3,7 @@
 #description     :AutoTerm_old is a serial port terminal. This terminal will automagically reconnect to the serial port when it is plugged in again.
 #author          :Spudmn
 #date            :20/03/2018
-#version         :0.3
+#version         :0.4
 #usage           :python AutoTerm_old.py COM5   or python AutoTerm_old.py /dev/ttyUSB0  
 #notes           :
 #python_version  :2.7.9  
@@ -103,18 +103,19 @@ class SerialThread(threading.Thread):
                     
 
 
-class App(tk.Tk):
-    def __init__(self,sComport):
-        tk.Tk.__init__(self)
+class App(object):
+    
+    def __init__(self,parent,sComport):
         
+        self.parent=parent
         self.sComport = sComport
-        self.title("AutoTerm V0.3")
+        self.parent.title("AutoTerm V0.3")
         
 
        
-        self.text = tkst.ScrolledText(self, height=30, width=80,font='Terminal_Ctrl+Hex 9', background="black", foreground="yellow")
+        self.text = tkst.ScrolledText(self.parent, height=30, width=80,font='Terminal_Ctrl+Hex 9', background="black", foreground="yellow")
                
-        self.frame = tk.Frame(self)
+        self.frame = tk.Frame(self.parent)
         self.frame.pack(side='bottom')
 
         self.bt_Clear_Screen = tk.Button(self.frame, text="Clear", command = self.On_bt_Clear_Screen_Click)
@@ -167,17 +168,18 @@ class App(tk.Tk):
             except Queue.Empty:
                 print "Que Error"
                 pass
-        self.after(100, self.process_serial)
+        self.parent.after(100, self.process_serial)
 
 
 def main(argv):
+    root = tk.Tk()
     if len(argv) == 0:
         print "Usage: python AutoTerm_old.py COM5   or python AutoTerm_old.py /dev/ttyUSB0 "
         sys.exit(1)
     else:
         sComport = argv[0]
-    app = App(sComport)
-    app.mainloop()
+    app = App(root,sComport)
+    root.mainloop()
 
 
 
