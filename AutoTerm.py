@@ -1,12 +1,12 @@
 #!/usr/bin/env python
-#title           :AutoTerm_old.py
-#description     :AutoTerm_old is a serial port terminal. This terminal will automagically reconnect to the serial port when it is plugged in again.
+#title           :AutoTerm.py
+#description     :AutoTerm is a serial port terminal. This terminal will automagically reconnect to the serial port when it is plugged in again.
 #author          :Spudmn
-#date            :20/03/2018
-#version         :0.4
-#usage           :python AutoTerm_old.py COM5   or python AutoTerm_old.py /dev/ttyUSB0  
+#date            :12/09/2018
+#version         :0.5
+#usage           :python AutoTerm.py COM5   or python AutoTerm.py /dev/ttyUSB0  
 #notes           :
-#python_version  :2.7.9  
+#python_version  :3.5.2  
 #==============================================================================
 
 #     This program is free software: you can redistribute it and/or modify
@@ -29,9 +29,9 @@
 import sys
 import serial
 import threading
-import Queue
-import Tkinter as tk
-import ScrolledText as tkst
+import queue
+import tkinter as tk
+import tkinter.scrolledtext as tkst
 import time
 
 import os
@@ -109,7 +109,7 @@ class App(object):
         
         self.parent=parent
         self.sComport = sComport
-        self.parent.title("AutoTerm V0.3")
+        self.parent.title("AutoTerm V0.5")
         
 
        
@@ -135,7 +135,7 @@ class App(object):
         self.text.bind("<KeyRelease>", self.keyup)
         
         
-        self.queue = Queue.Queue()
+        self.queue = queue.Queue()
         self.thread = SerialThread(self.queue,self.sComport,self.lb_Status)
         self.thread.daemon = True;  #this will cuase the serial thread to close on exit
         self.thread.start()
@@ -165,16 +165,33 @@ class App(object):
                 else:
                     self.text.insert('end', self.queue.get())
                       
-            except Queue.Empty:
-                print "Que Error"
+            except queue.Empty:
+                print("Que Error")
                 pass
         self.parent.after(100, self.process_serial)
 
 
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+
+
 def main(argv):
+    print(sys.version)
     root = tk.Tk()
+    try:
+        root.iconbitmap(default=resource_path('app.ico'))
+    except Exception:
+        pass
     if len(argv) == 0:
-        print "Usage: python AutoTerm_old.py COM5   or python AutoTerm_old.py /dev/ttyUSB0 "
+        print("Usage: python AutoTerm.py COM5   or python AutoTerm.py /dev/ttyUSB0 ")
         sys.exit(1)
     else:
         sComport = argv[0]
