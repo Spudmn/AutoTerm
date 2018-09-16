@@ -1,9 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #title           :AutoTerm.py
 #description     :AutoTerm is a serial port terminal. This terminal will automagically reconnect to the serial port when it is plugged in again.
 #author          :Spudmn
-#date            :12/09/2018
-#version         :0.5
+#date            :16/09/2018
+#version         :0.6
 #usage           :python AutoTerm.py COM5   or python AutoTerm.py /dev/ttyUSB0  
 #notes           :
 #python_version  :3.5.2  
@@ -109,7 +109,7 @@ class App(object):
         
         self.parent=parent
         self.sComport = sComport
-        self.parent.title("AutoTerm V0.5")
+        self.parent.title("AutoTerm V0.6")
         
 
        
@@ -147,10 +147,10 @@ class App(object):
         pass
         
     def keydown(self,e):
-#         print 'down', e.char
+#         print ('down', e.char)
         if self.thread.Serial_Port != None:
             if self.thread.Serial_Port.isOpen():
-                self.thread.Serial_Port.write(e.char)
+                self.thread.Serial_Port.write(e.char.encode())
 
     def On_bt_Clear_Screen_Click(self):
         self.text.delete(1.0,'end')
