@@ -2,8 +2,8 @@
 #title           :AutoTerm.py
 #description     :AutoTerm is a serial port terminal. This terminal will automagically reconnect to the serial port when it is plugged in again.
 #author          :Spudmn
-#date            :16/09/2018
-#version         :0.6
+#date            :17/09/2018
+#version         :0.7
 #usage           :python AutoTerm.py COM5   or python AutoTerm.py /dev/ttyUSB0  
 #notes           :
 #python_version  :3.5.2  
@@ -33,6 +33,7 @@ import queue
 import tkinter as tk
 import tkinter.scrolledtext as tkst
 import time
+from enum import Enum
 
 import os
 
@@ -43,15 +44,20 @@ elif os.name == 'posix':
 else:
     raise ImportError("Sorry: no implementation for your platform ('{}') available".format(os.name))
         
+
+class Serial_Thread_State(Enum):
+    FINDING_PORT = 0
+    FOUND_PORT = 1
+
   
 
 class SerialThread(threading.Thread):
-    def __init__(self, queue,sPort_Name,lb_Status):
+    def __init__(self, Serial_Queue,sPort_Name,lb_Status_Queue):
         threading.Thread.__init__(self)
-        self.queue = queue
+        self.Serial_Queue = Serial_Queue
         self.sPort_Name = sPort_Name
-        self.lb_Status = lb_Status
-        self.state = 0
+        self.lb_Status_Queue = lb_Status_Queue
+        self.state = Serial_Thread_State.FINDING_PORT
         self.Serial_Port = None
 
     def Is_Comport_Present(self,sComport):
@@ -63,26 +69,26 @@ class SerialThread(threading.Thread):
         
     def run(self):
         while True:
-            if self.state == 0:
+            if self.state == Serial_Thread_State.FINDING_PORT:
 
                 if self.Is_Comport_Present(self.sPort_Name):
                     
                     try:
                         self.Serial_Port = serial.Serial(self.sPort_Name,115200)
-                        self.state = 1
-                        self.lb_Status.config(text= "Status: Online",fg="black")
+                        self.state = Serial_Thread_State.FOUND_PORT
+                        self.lb_Status_Queue.put(["Status: Online","black"])
                     except :
-                        self.lb_Status.config(text= "Status: Can not open port", fg="red")
+                        self.lb_Status_Queue.put(["Status: Can not open port","red"])
                         if self.Serial_Port != None:
                             self.Serial_Port.close()
                             self.Serial_Port = None
                         #print "Port Error"
                 else:
-                    self.lb_Status.config(text= "Status: Offline", fg="red")
+                    self.lb_Status_Queue.put(["Status: Offline","red"])
                     # Wait for 5 m seconds
                     time.sleep(.500)
 
-            else:  # State == 1
+            elif self.state == Serial_Thread_State.FOUND_PORT:
                 try:
                       
                     data = self.Serial_Port.read(1)
@@ -91,16 +97,17 @@ class SerialThread(threading.Thread):
                         if self.Serial_Port != None:
                             self.Serial_Port.close()
                             self.Serial_Port = None
-                        self.state = 0
+                        self.state = Serial_Thread_State.FINDING_PORT
                         continue
-                    self.queue.put(data)
+                    self.Serial_Queue.put(data)
                 except :
 #                     print "Serial Error"
                     if self.Serial_Port != None:
                         self.Serial_Port.close()
                         self.Serial_Port = None
-                    self.state = 0
-                    
+                    self.state = Serial_Thread_State.FINDING_PORT
+            else:
+                print ("Error in State")       
 
 
 class App(object):
@@ -109,14 +116,14 @@ class App(object):
         
         self.parent=parent
         self.sComport = sComport
-        self.parent.title("AutoTerm V0.6")
-        
+        self.parent.title("AutoTerm V0.7")
 
        
         self.text = tkst.ScrolledText(self.parent, height=30, width=80,font='Terminal_Ctrl+Hex 9', background="black", foreground="yellow")
                
         self.frame = tk.Frame(self.parent)
         self.frame.pack(side='bottom')
+
 
         self.bt_Clear_Screen = tk.Button(self.frame, text="Clear", command = self.On_bt_Clear_Screen_Click)
         self.bt_Clear_Screen.pack( side = 'left')
@@ -135,12 +142,28 @@ class App(object):
         self.text.bind("<KeyRelease>", self.keyup)
         
         
-        self.queue = queue.Queue()
-        self.thread = SerialThread(self.queue,self.sComport,self.lb_Status)
+        
+        self.Serial_Queue = queue.Queue()
+        self.lb_Status_Queue = queue.Queue()
+        self.thread = SerialThread(self.Serial_Queue,self.sComport,self.lb_Status_Queue)
         self.thread.daemon = True;  #this will cuase the serial thread to close on exit
         self.thread.start()
         self.process_serial()
+        self.On_Update_GUI_Timer()
 
+
+    def On_Update_GUI_Timer(self): #Update the GUI
+        while self.lb_Status_Queue.qsize():
+            try:
+                status = self.lb_Status_Queue.get()
+                #print(status)
+                self.lb_Status.config(text= status[0],fg=status[1])
+            except queue.Empty:
+                print("lb_Status Que Error")
+                pass
+        self.parent.after(250, self.On_Update_GUI_Timer) #Update the GUI
+
+    
 
     def keyup(self,e):
 #         print 'up', e.char
@@ -157,13 +180,13 @@ class App(object):
         
  
     def process_serial(self):
-        while self.queue.qsize():
+        while self.Serial_Queue.qsize():
             try:
                 if self.text.dlineinfo('end-1chars') != None:
-                    self.text.insert('end', self.queue.get())    #if the scroll bar is at the bottom then output string and shift to keep the new line in view
+                    self.text.insert('end', self.Serial_Queue.get())    #if the scroll bar is at the bottom then output string and shift to keep the new line in view
                     self.text.see('end')
                 else:
-                    self.text.insert('end', self.queue.get())
+                    self.text.insert('end', self.Serial_Queue.get())
                       
             except queue.Empty:
                 print("Que Error")
