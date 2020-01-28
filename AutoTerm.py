@@ -2,8 +2,8 @@
 #title           :AutoTerm.py
 #description     :AutoTerm is a serial port terminal. This terminal will automagically reconnect to the serial port when it is plugged in again.
 #author          :Spudmn
-#date            :17/09/2018
-#version         :0.7
+#date            :28/01/2020
+#version         :0.8
 #usage           :python AutoTerm.py COM5   or python AutoTerm.py /dev/ttyUSB0  
 #notes           :
 #python_version  :3.5.2  
@@ -28,9 +28,11 @@
 
 import sys
 import serial
+import serial.tools.list_ports
 import threading
 import queue
 import tkinter as tk
+import tkinter.ttk as ttk
 import tkinter.scrolledtext as tkst
 import time
 from enum import Enum
@@ -46,8 +48,10 @@ else:
         
 
 class Serial_Thread_State(Enum):
-    FINDING_PORT = 0
-    FOUND_PORT = 1
+    IS_PORT_ENABLED = 0
+    WAITING_FOR_ENABLED = 1
+    FINDING_PORT = 2
+    FOUND_PORT = 3
 
   
 
@@ -57,8 +61,15 @@ class SerialThread(threading.Thread):
         self.Serial_Queue = Serial_Queue
         self.sPort_Name = sPort_Name
         self.lb_Status_Queue = lb_Status_Queue
-        self.state = Serial_Thread_State.FINDING_PORT
+        
+        self.Enable_Queue = queue.Queue()
+        
+        self.state = Serial_Thread_State.IS_PORT_ENABLED
         self.Serial_Port = None
+        self.Enabled = True
+        self.Enabled_Changed = threading.Event()
+        self.Enabled_Changed.clear()
+
 
     def Is_Comport_Present(self,sComport):
         for port, _desc, _hwid in comports():
@@ -67,14 +78,46 @@ class SerialThread(threading.Thread):
                 return True
         return False
         
+    def Check_Enable_Queue(self):
+        while self.Enable_Queue.qsize():
+            enabled = self.Enable_Queue.get()
+            if (self.Enabled != enabled):
+                self.Enabled = enabled
+                self.Enabled_Changed.set()
+                
+                if (self.Enabled == False):
+                    if self.Serial_Port != None:
+                        self.Serial_Port.close()
+                        self.Serial_Port = None
+                
+        
+    def Enable_Port(self,enabled):
+        self.Enable_Queue.put(enabled)
+        
     def run(self):
         while True:
-            if self.state == Serial_Thread_State.FINDING_PORT:
+#             print (self.state)
+            self.Check_Enable_Queue()
+            
+            if self.state == Serial_Thread_State.IS_PORT_ENABLED:
+                
+                if self.Enabled:
+                    self.state = Serial_Thread_State.FINDING_PORT
+                else:
+                    self.lb_Status_Queue.put(["Status: Disabled","red"])
+                    self.Enabled_Changed.clear()
+                    self.state = Serial_Thread_State.WAITING_FOR_ENABLED
+                    
+            elif self.state == Serial_Thread_State.WAITING_FOR_ENABLED:
+                
+                self.Enabled_Changed.wait(timeout=0.5)
+                self.state = Serial_Thread_State.IS_PORT_ENABLED
+                
+            elif self.state == Serial_Thread_State.FINDING_PORT:
 
                 if self.Is_Comport_Present(self.sPort_Name):
-                    
                     try:
-                        self.Serial_Port = serial.Serial(self.sPort_Name,115200)
+                        self.Serial_Port = serial.Serial(self.sPort_Name,115200,timeout=0.5)
                         self.state = Serial_Thread_State.FOUND_PORT
                         self.lb_Status_Queue.put(["Status: Online","black"])
                     except :
@@ -90,24 +133,23 @@ class SerialThread(threading.Thread):
 
             elif self.state == Serial_Thread_State.FOUND_PORT:
                 try:
-                      
                     data = self.Serial_Port.read(1)
-                    if data is None or data == "":
-#                         print "Return"
+                    if data is None:
+#                         print ("Return")
                         if self.Serial_Port != None:
                             self.Serial_Port.close()
                             self.Serial_Port = None
-                        self.state = Serial_Thread_State.FINDING_PORT
+                        self.state = Serial_Thread_State.IS_PORT_ENABLED
                         continue
                     self.Serial_Queue.put(data)
                 except :
-#                     print "Serial Error"
+#                     print ("Serial Error")
                     if self.Serial_Port != None:
                         self.Serial_Port.close()
                         self.Serial_Port = None
-                    self.state = Serial_Thread_State.FINDING_PORT
+                    self.state = Serial_Thread_State.IS_PORT_ENABLED
             else:
-                print ("Error in State")       
+                print ("Error in State")
 
 
 class App(object):
@@ -116,7 +158,7 @@ class App(object):
         
         self.parent=parent
         self.sComport = sComport
-        self.parent.title("AutoTerm V0.7")
+        self.parent.title("AutoTerm V0.8")
 
        
         self.text = tkst.ScrolledText(self.parent, height=30, width=80,font='Terminal_Ctrl+Hex 9', background="black", foreground="yellow")
@@ -124,6 +166,13 @@ class App(object):
         self.frame = tk.Frame(self.parent)
         self.frame.pack(side='bottom')
 
+        
+        self.Comport_Enabled = tk.IntVar()
+        self.Comport_Enabled.set(1)
+        
+        self.cbtn = ttk.Checkbutton(self.frame,text="Enable",variable=self.Comport_Enabled,command=self.On_Enable_Click)
+        self.cbtn.pack( side = 'left')
+        
 
         self.bt_Clear_Screen = tk.Button(self.frame, text="Clear", command = self.On_bt_Clear_Screen_Click)
         self.bt_Clear_Screen.pack( side = 'left')
@@ -140,7 +189,6 @@ class App(object):
         
         self.text.bind("<KeyPress>", self.keydown)
         self.text.bind("<KeyRelease>", self.keyup)
-        
         
         
         self.Serial_Queue = queue.Queue()
@@ -178,6 +226,12 @@ class App(object):
     def On_bt_Clear_Screen_Click(self):
         self.text.delete(1.0,'end')
         
+        
+    def On_Enable_Click(self):
+        if self.Comport_Enabled.get():
+            self.thread.Enable_Port(True)
+        else:
+            self.thread.Enable_Port(False)
  
     def process_serial(self):
         while self.Serial_Queue.qsize():
